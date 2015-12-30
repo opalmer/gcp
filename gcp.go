@@ -47,9 +47,10 @@ func copyPaths(
 	log.Debug("Copy %s -> %s", source, destination)
 }
 
-// TODO config handling
+// TODO config handling (HOME, config option, environment)
 // TODO   add exclusions (fnmatch)
 // TODO   add inclusions to ignore from exclusions (fnmatch)
+// TODO   secret key from config or fail if it's not in the command line parser
 
 
 func main() {
