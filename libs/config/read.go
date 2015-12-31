@@ -25,7 +25,10 @@ func GetSlice(key string) []string {
 	output := []string{}
 
 	for _, value := range strings.Split(source, ",") {
-		output = append(output, strings.TrimSpace(value))
+		trimmed := strings.TrimSpace(value)
+		if len(trimmed) > 0 {
+			output = append(output, trimmed)
+		}
 	}
 
 	return output
