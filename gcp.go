@@ -1,9 +1,11 @@
 package main
 
 import (
-	//	"./libs/file"
+	"./libs/config"
+	"./libs/file"
 	"flag"
 	"github.com/op/go-logging"
+	"io/ioutil"
 	"os"
 )
 
@@ -19,7 +21,7 @@ func initializeLogging(levelInput string) {
 
 	// Global format configuration
 	formatter := logging.MustStringFormatter(
-		`%{color}%{time:15:04:05.000} %{shortfunc} %{level:7s} %{color:reset} %{message}`,
+		`%{color}%{time:15:04:05.000} %{shortfunc} %{level} %{color:reset} %{message}`,
 	)
 	logging.SetFormatter(formatter)
 
@@ -42,30 +44,61 @@ func initializeLogging(levelInput string) {
 	logging.SetBackend(stdoutLeveled, stderrLeveled)
 }
 
-func copyPaths(
-	encryption bool, compression bool, source string, destination string) {
-	log.Debug("Copy %s -> %s", source, destination)
-}
-
-// TODO config handling (HOME, config option, environment)
-// TODO   add exclusions (fnmatch)
-// TODO   add inclusions to ignore from exclusions (fnmatch)
-// TODO   secret key from config or fail if it's not in the command line parser
-
-
 func main() {
+	// Command line parsing
 	disableCompression := flag.Bool(
 		"disable-compression", false, "If provided files will not be zipped up")
 	disableEncryption := flag.Bool(
 		"disable-encryption", false, "If provided files will not be encrypted")
 	logLevelInput := flag.String(
 		"log", "debug", "The logging level")
-
+	configPath := flag.String(
+		"config", "", "A direct path to a configuration file.")
+	skipRelativeCheck := flag.Bool(
+		"ignore-relative-check", false,
+		`If provided, don't halt if the source and destination paths appear
+		to relative to each other.`)
+	encryptionKey := flag.String(
+		"key", "",
+		"A string to use as the encryption key or the path to a file")
+	dryRun := flag.Bool(
+		"dry-run", false,
+		"If provided, don't actually perform any operations")
 	flag.Parse()
+	args := flag.Args()
 
 	initializeLogging(*logLevelInput)
 	log = logging.MustGetLogger("gcp")
 
+	// Make sure we're not missing any input arguments
+	if len(args) != 2 {
+		log.Error(
+			"Expected two input arguments: %s <source> <destination>",
+			os.Args[0])
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	source := files.AbsolutePath(flag.Arg(0))
+	destination := files.AbsolutePath(flag.Arg(1))
+
+	if !files.Exists(source) {
+		log.Error("Source '%s' does not exist", source)
+		os.Exit(1)
+	}
+
+	if files.IsRelative(source, destination) {
+		if !*skipRelativeCheck {
+			log.Error(
+				"Source and destination appear to be relative to one another")
+			os.Exit(1)
+		} else {
+			log.Warning(
+				"Source and destination appear to be relative to one another")
+		}
+	}
+
+	// General warnings and information perform we perform any work.
 	if *disableCompression {
 		log.Info("Compression has been disabled")
 	}
@@ -74,8 +107,18 @@ func main() {
 		log.Warning("Encryption has been disabled")
 	}
 
-	source := "/tmp/foo"
-	destination := "/tmp/bar"
+	// Reading the encryption key
+	data, err := ioutil.ReadFile(*encryptionKey)
+	if err != nil && !os.IsNotExist(err) {
+		log.Fatal(err)
+	}
+	if err == nil {
+		log.Info("Reading encryption key from file '%s'", *encryptionKey)
+		*encryptionKey = string(data[:])
+	}
 
-	copyPaths(*disableEncryption, *disableEncryption, source, destination)
+	// Load the configuration and start processing.
+	config.Load(*configPath, *encryptionKey)
+	files.Copy(
+		*dryRun, *disableEncryption, *disableEncryption, source, destination)
 }
