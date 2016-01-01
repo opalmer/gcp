@@ -4,12 +4,14 @@ package files
 
 import (
 	"../config"
+	"bytes"
+	"code.google.com/p/lzma"
 	"io"
 	"io/ioutil"
 	"os"
 )
 
-const defaultReadSize = 5e+6 // 5 mb
+const maxReadSize = 5e+7 // 50MB
 
 // OutputHandler - The main object for controlling output to a file.
 type OutputHandler struct {
@@ -37,27 +39,53 @@ func NewOutput(source string, destination string) (OutputHandler, error) {
 	out := OutputHandler{
 		source: sourceFile, tmp: tempfile, destination: destination}
 
+	processing++
 	return out, nil
 }
 
-// ReadSize - Returns how many bytes we should read at a time.  This will
-// either be defaultReadSize or the size of the file if defaultReadSize is
-// larger than the original file.
-func (out *OutputHandler) ReadSize() int64 {
+// SourceSize - Returns the size of the source in bytes
+func (out *OutputHandler) SourceSize() int64 {
 	stat, err := out.source.Stat()
 	if err != nil {
 		log.Fatalf("Failed to stat %s (err: %s)", out.source.Name(), err)
 	}
-	if defaultReadSize > stat.Size() {
-		return stat.Size()
+	return stat.Size()
+}
+
+// DestinationSize - The size of the destination file
+func (out *OutputHandler) DestinationSize() int64 {
+	stat, err := out.tmp.Stat()
+	if err != nil {
+		log.Fatalf("Failed to stat %s (err: %s)", out.tmp.Name(), err)
 	}
-	return defaultReadSize
+	return stat.Size()
+}
+
+// ReadSize - Returns how many bytes we should read at one time.
+func (out *OutputHandler) ReadSize() int64 {
+	sourceSize := out.SourceSize()
+
+	if sourceSize < maxReadSize {
+		return sourceSize
+	}
+
+	autoReadSize := sourceSize / 50
+
+	if autoReadSize > maxReadSize {
+		return maxReadSize
+	}
+	return autoReadSize
 }
 
 // Done - Called when we've finished processing the file.
 func (out *OutputHandler) Done() {
 	processing--
 	wait.Done()
+
+	sourceSize := out.SourceSize()
+	sizeDifference := sourceSize - out.DestinationSize()
+	compressionRatio := int(
+		(float64(sizeDifference) / float64(sourceSize)) * 100)
 
 	tmpErrClose := out.tmp.Close()
 	if tmpErrClose != nil {
@@ -77,7 +105,7 @@ func (out *OutputHandler) Done() {
 			"Failed to close %s (err: %s)", out.source.Name(), srcCloseErr)
 	}
 
-	log.Debug("%s", out.destination)
+	log.Infof("%s (%d%%)", out.destination, compressionRatio)
 }
 
 // Process - Opens the source file, performs operations (compress/encrypt) and
@@ -102,7 +130,12 @@ func (out *OutputHandler) Process() {
 		}
 
 		if config.Compress {
-
+			var compressedData bytes.Buffer
+			lzmaWriter := lzma.NewWriterSize(
+				&compressedData, lzma.BestCompression)
+			lzmaWriter.Write(data)
+			lzmaWriter.Close()
+			data = compressedData.Bytes()
 		}
 
 		if config.Encrypt {
