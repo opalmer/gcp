@@ -1,6 +1,9 @@
 package files
 
+// info.go - Produces or constructs information for a given path.
+
 import (
+	"../config"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,4 +51,18 @@ func IsRelative(parent string, child string) bool {
 	// If the relative path starts with .. then Rel() had to walk
 	// up and out of parentAbsolute.
 	return !strings.HasPrefix(relative, "..")
+}
+
+// DestinationPath - Returns the path which the provided source should end
+// up being copied to (minus the filename)
+func DestinationPath(path string) string {
+	if config.Compress {
+		path += ".lzma"
+	}
+
+	if config.Encrypt {
+		path += ".aes"
+	}
+
+	return filepath.Join(config.Destination, path)
 }
