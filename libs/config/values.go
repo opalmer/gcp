@@ -67,4 +67,4 @@ var Source string
 var CryptoKey string
 
 // DryRun - Disables certain opertations if True.
-var DryRun bool
+var DryRun = GetBool("dry_run")

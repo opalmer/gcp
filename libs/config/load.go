@@ -18,11 +18,12 @@ func Default() *ini.File {
 	cfg := ini.Empty()
 	cfg.Append([]byte(`
 		[gcp]
-		crypto_key =
 		encrypt = true
 		compress = true
+		dry_run = false
+		crypto_key =
 		include =
-		exclude =
+		exclude = .DS_Store,.git,.svn,.hg,.egg*,__pycache__,.idea,*.pyc
 	`))
 	return cfg
 }

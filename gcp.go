@@ -99,7 +99,6 @@ func main() {
 		}
 	}
 
-	// General warnings and information perform we perform any work.
 	if *disableCompression {
 		log.Info("Compression has been disabled")
 		config.Compress = false
