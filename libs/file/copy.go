@@ -21,6 +21,13 @@ var MaxThreads int
 // Walk - Called by filepath.Walk to process files and directories.  This also
 // performs the work of filtering paths which wish to process using SkipPath()
 func Walk(path string, info os.FileInfo, err error) error {
+	for {
+		if processing <= MaxThreads {
+			break
+		}
+		time.Sleep(1)
+	}
+
 	if err != nil {
 		log.Fatalf("Cannot process %s (err: %s)", path, err)
 	}
@@ -38,13 +45,6 @@ func Walk(path string, info os.FileInfo, err error) error {
 			return filepath.SkipDir
 		}
 		return nil
-	}
-
-	for {
-		if processing <= MaxThreads {
-			break
-		}
-		time.Sleep(1)
 	}
 
 	if !stat.IsDir() {
