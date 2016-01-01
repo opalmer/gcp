@@ -8,8 +8,6 @@ import (
 )
 
 var log = logging.MustGetLogger("gcp")
-var include []string
-var exclude []string
 
 // SkipPath - Return True if the requested path should be skipped
 func SkipPath(path string) bool {
@@ -18,14 +16,15 @@ func SkipPath(path string) bool {
 	basename := filepath.Base(path)
 	dirname := filepath.Dir(path)
 
-	for _, inclusionPattern := range include {
+	for _, inclusionPattern := range config.Include {
 		matched, err := filepath.Match(inclusionPattern, basename)
-		if err == nil && matched || inclusionPattern == path || inclusionPattern == dirname {
+		if err == nil && matched || inclusionPattern == path ||
+			inclusionPattern == dirname {
 			return false
 		}
 	}
 
-	for _, exclusionPattern := range exclude {
+	for _, exclusionPattern := range config.Exclude {
 		matched, err := filepath.Match(exclusionPattern, basename)
 		if err == nil && matched || exclusionPattern == path ||
 			exclusionPattern == dirname {
@@ -36,36 +35,59 @@ func SkipPath(path string) bool {
 	return false
 }
 
-// Walk - Called by filepath.Walk to process files and directories
+// DestinationPath - Returns the path which the provided source should end
+// up being copied to (minus the filename)
+func DestinationPath(path string) string {
+	if config.Compress {
+		path += ".7z"
+	}
+
+	if config.Encrypt {
+		path += "aes"
+	}
+
+	return filepath.Join(config.Destination)
+}
+
+// ProcessFile - Processes an individual file (called by Walk()).
+func ProcessFile(path string) {
+	destination := DestinationPath(path)
+	log.Debug("Processing %s -> %s", path, destination)
+
+}
+
+// Walk - Called by filepath.Walk to process files and directories.  This also
+// performs the work of filtering paths which wish to process using SkipPath()
 func Walk(path string, info os.FileInfo, err error) error {
+	if err != nil {
+		log.Fatalf("Cannot process %s (err: %s)", path, err)
+	}
+
 	stat, err := os.Stat(path)
 
 	if os.IsNotExist(err) {
 		return filepath.SkipDir
 	} else if err != nil {
 		log.Fatalf("Stat failed on %s (err: %s)", path, err)
-	} else if stat.IsDir() || SkipPath(path) {
+	}
+
+	if SkipPath(path) {
+		if stat.IsDir() {
+			return filepath.SkipDir
+		}
 		return nil
 	}
 
-	if !SkipPath(path) {
-		log.Debug("Processing %s", path)
-	}
-
+	ProcessFile(path)
 	return nil
 }
 
-// Copy - The main function which handles copy/compressing/encrypting files.
-func Copy(
-	dryRun bool, encryption bool, compression bool,
-	source string, destination string) {
+// Copy - The main function which does some preconfiguration and then passes
+// off work to fileutil.Walk.
+func Copy() {
+	log.Infof("Copy %s -> %s", config.Source, config.Destination)
 
-	include = config.GetSlice("include")
-	exclude = config.GetSlice("exclude")
-
-	log.Debug("Copy %s -> %s", source, destination)
-
-	err := filepath.Walk(source, Walk)
+	err := filepath.Walk(config.Source, Walk)
 	if err != nil {
 		log.Warningf("One or more failures: %s", err)
 	}

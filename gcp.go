@@ -79,15 +79,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	source := files.AbsolutePath(flag.Arg(0))
-	destination := files.AbsolutePath(flag.Arg(1))
+	config.Source = files.AbsolutePath(flag.Arg(0))
+	config.Destination = files.AbsolutePath(flag.Arg(1))
+	config.DryRun = *dryRun
 
-	if !files.Exists(source) {
-		log.Error("Source '%s' does not exist", source)
+	if !files.Exists(config.Source) {
+		log.Error("Source '%s' does not exist", config.Source)
 		os.Exit(1)
 	}
 
-	if files.IsRelative(source, destination) {
+	if files.IsRelative(config.Source, config.Destination) {
 		if !*skipRelativeCheck {
 			log.Error(
 				"Source and destination appear to be relative to one another")
@@ -101,10 +102,12 @@ func main() {
 	// General warnings and information perform we perform any work.
 	if *disableCompression {
 		log.Info("Compression has been disabled")
+		config.Compress = false
 	}
 
 	if *disableEncryption {
 		log.Warning("Encryption has been disabled")
+		config.Encrypt = false
 	}
 
 	// Reading the encryption key
@@ -119,6 +122,5 @@ func main() {
 
 	// Load the configuration and start processing.
 	config.Load(*configPath, *encryptionKey)
-	files.Copy(
-		*dryRun, *disableEncryption, *disableEncryption, source, destination)
+	files.Copy()
 }

@@ -19,6 +19,8 @@ func Default() *ini.File {
 	cfg.Append([]byte(`
 		[gcp]
 		crypto_key =
+		encrypt = true
+		compress = true
 		include =
 		exclude =
 	`))
@@ -76,4 +78,5 @@ func Load(path string, encryptionKey string) {
 		key.SetValue(encryptionKey)
 	}
 
+	CryptoKey = GetKey("crypto_key").Value()
 }
