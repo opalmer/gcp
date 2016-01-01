@@ -7,6 +7,7 @@ import (
 	"github.com/op/go-logging"
 	"io/ioutil"
 	"os"
+	"runtime"
 )
 
 var log *logging.Logger
@@ -64,6 +65,10 @@ func main() {
 	dryRun := flag.Bool(
 		"dry-run", false,
 		"If provided, don't actually perform any operations")
+	maxThreads := flag.Int(
+		"max-threads", runtime.NumCPU(),
+		"The maximum number of threads for processing files")
+
 	flag.Parse()
 	args := flag.Args()
 
@@ -82,6 +87,12 @@ func main() {
 	config.Source = files.AbsolutePath(flag.Arg(0))
 	config.Destination = files.AbsolutePath(flag.Arg(1))
 	config.DryRun = *dryRun
+	files.MaxThreads = *maxThreads
+
+	if files.MaxThreads < 1 {
+		log.Error("-max-threads must be at least one")
+		os.Exit(1)
+	}
 
 	if !files.Exists(config.Source) {
 		log.Error("Source '%s' does not exist", config.Source)

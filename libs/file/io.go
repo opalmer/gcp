@@ -19,28 +19,51 @@ type OutputHandler struct {
 }
 
 // NewOutput - Produce a copy of Output and prepares to write data to disk.
-func NewOutput(source string, destination string) OutputHandler {
+func NewOutput(source string, destination string) (OutputHandler, error) {
 	sourceFile, err := os.Open(source)
 	if err != nil {
-		log.Fatalf("Failed to open %s (err: %s)", source, err)
+		log.Errorf("Failed to open %s (err: %s)", source, err)
+		return OutputHandler{}, err
 	}
 
 	tempfile, err := ioutil.TempFile(os.TempDir(), "gcp")
 
 	if err != nil {
 		defer sourceFile.Close()
-		log.Fatalf("Failed to create temp file for %s (err: %s)", source, err)
+		log.Errorf("Failed to create temp file for %s (err: %s)", source, err)
+		return OutputHandler{}, err
 	}
 
 	out := OutputHandler{
 		source: sourceFile, tmp: tempfile, destination: destination}
 
-	return out
+	return out, nil
+}
+
+// Done - Called when we've finished processing the file.
+func (out *OutputHandler) Done() {
+	processing--
+	wait.Done()
+
+	errClose := out.tmp.Close()
+	if errClose != nil {
+		log.Fatalf("Failed to close %s (err: %s)", out.tmp.Name(), errClose)
+	}
+
+	errRemove := os.Remove(out.tmp.Name())
+	if errRemove != nil {
+		log.Fatalf("Failed to remove %s (err: %s)", out.tmp.Name(), errRemove)
+	}
+
+	log.Debug("%s", out.destination)
 }
 
 // Process - Opens the source file, performs operations (compress/encrypt) and
 // writes the output to the temporary file.
 func (out *OutputHandler) Process() {
+	defer out.Done()
+
+	log.Debug("%s -> %s", out.source.Name(), out.destination)
 	for {
 		// Read n bytes from the source file
 		data := make([]byte, readSize)
@@ -53,29 +76,14 @@ func (out *OutputHandler) Process() {
 				"Failed to read from %s (err: %s)", out.source.Name(), err)
 		}
 
-		out.tmp.Write(data)
-
 		if config.Compress {
 
 		}
 		if config.Encrypt {
 
 		}
-	}
 
-	defer out.Cleanup()
-}
-
-// Cleanup - Removes the tempfile on disk
-func (out *OutputHandler) Cleanup() {
-	errClose := out.tmp.Close()
-	if errClose != nil {
-		log.Fatalf("Failed to close %s (err: %s)", out.tmp.Name(), errClose)
-	}
-
-	errRemove := os.Remove(out.tmp.Name())
-	if errRemove != nil {
-		log.Fatalf("Failed to remove %s (err: %s)", out.tmp.Name(), errRemove)
+		out.tmp.Write(data)
 	}
 
 }

@@ -8,20 +8,15 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 var log = logging.MustGetLogger("gcp")
 var wait sync.WaitGroup
+var processing = 0
 
-// ProcessFile - Processes an individual file (called by Walk()).
-func ProcessFile(path string) {
-	destination := DestinationPath(path)
-	log.Debug("%s -> %s", path, destination)
-	output := NewOutput(path, destination)
-	output.Process()
-	log.Debug("[done] %s -> %s", path, destination)
-	defer wait.Done()
-}
+// MaxThreads the maxiumum number of threads for handling files
+var MaxThreads int
 
 // Walk - Called by filepath.Walk to process files and directories.  This also
 // performs the work of filtering paths which wish to process using SkipPath()
@@ -45,9 +40,27 @@ func Walk(path string, info os.FileInfo, err error) error {
 		return nil
 	}
 
+	for {
+		if processing <= MaxThreads {
+			break
+		}
+		time.Sleep(1)
+	}
+
 	if !stat.IsDir() {
+		processing++
+		destination := DestinationPath(path)
+		output, err := NewOutput(path, destination)
+
+		if err != nil {
+			log.Fatalf("Failed to create output for %s", path)
+		}
 		wait.Add(1)
-		go ProcessFile(path)
+		go output.Process()
+	}
+
+	if processing >= MaxThreads {
+		wait.Wait()
 	}
 
 	return nil
@@ -62,6 +75,7 @@ func Copy() {
 	if err != nil {
 		log.Warningf("One or more failures: %s", err)
 	}
-	wait.Wait()
 
+	// Make sure we wait on any remaining work
+	defer wait.Wait()
 }
