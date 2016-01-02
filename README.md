@@ -1,8 +1,9 @@
-**DISCLAIMER** **DISCLAIMER** **DISCLAIMER** **DISCLAIMER**
+Disclaimer
+----------
 This is an experimental tool which was mainly intended to 
-be a learning exercise.  Contributions or input are welcome
-as usual however.
-**DISCLAIMER** **DISCLAIMER** **DISCLAIMER** **DISCLAIMER**
+be a learning exercise in Go.  It was designed for a particular
+purpose, producing files for backup.  Contributions or other 
+improvements are still welcome however.
 
 GCP
 ---
