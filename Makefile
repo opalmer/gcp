@@ -9,11 +9,11 @@ dep:
 	$(GO) get -u github.com/golang/lint/golint
 
 fmt:
-	$(GO) fmt libs/config/*.go
-	$(GO) fmt libs/file/*.go
+	$(GO) fmt src/config/*.go
+	$(GO) fmt src/file/*.go
 	$(GO) fmt gcp.go
 
 lint:
-	$(GOLINT) libs/config
-	$(GOLINT) libs/file
+	$(GOLINT) src/config
+	$(GOLINT) src/file
 	$(GOLINT) gcp.go
