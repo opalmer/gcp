@@ -1,5 +1,6 @@
 GO ?= go
 GOLINT ?= golint
+GOPATH := $(GOPATH):$(PWD)
 
 build: fmt lint
 	$(GO) build gcp.go
