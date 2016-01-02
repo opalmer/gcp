@@ -11,4 +11,4 @@ install:
 # TODO: Replace this with a real test
 script:
   - touch foo.txt
-  - ./gcp ./foo.text /tmp/foobar/
+  - ./gcp ./foo.txt /tmp/foobar/
