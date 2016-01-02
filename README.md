@@ -8,7 +8,10 @@ improvements are still welcome however.
 GCP
 ---
 
-GCP is a command line tool designed to implement features similar 
+[![Build Status](https://travis-ci.org/opalmer/gcp.svg)](https://travis-ci.org/opalmer/gcp.svg)
+
+
+gcp is a command line tool designed to implement features similar 
 to the cp command on Linux in some respects. 
 
 The features of gcp are:
