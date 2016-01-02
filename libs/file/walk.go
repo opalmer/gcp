@@ -8,15 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 )
 
 var log = logging.MustGetLogger("gcp")
-var wait sync.WaitGroup
-var processing = 0
-
-// MaxThreads the maxiumum number of threads for handling files
-var MaxThreads int
+var filesProcessing = sync.WaitGroup{}
 
 // Walk - Called by filepath.Walk to process files and directories.  This also
 // performs the work of filtering paths which wish to process using SkipPath()
@@ -41,26 +36,9 @@ func Walk(path string, info os.FileInfo, err error) error {
 	}
 
 	if !stat.IsDir() {
-		for {
-			if processing <= MaxThreads {
-				break
-			}
-			time.Sleep(1)
-		}
-
-		output, err := NewOutput(path, DestinationPath(path))
-		if err != nil {
-			log.Fatalf("Failed to create output for %s", path)
-		}
-
-		wait.Add(1)
-		go output.Process()
+		filesProcessing.Add(1)
+		channels.paths <- path
 	}
-
-	if processing >= MaxThreads {
-		wait.Wait()
-	}
-
 	return nil
 }
 
@@ -69,11 +47,20 @@ func Walk(path string, info os.FileInfo, err error) error {
 func Copy() {
 	log.Infof("Copy %s -> %s", config.Source, config.Destination)
 
-	err := filepath.Walk(config.Source, Walk)
-	if err != nil {
-		log.Warningf("One or more failures: %s", err)
+	// Before we walk over the paths, setup all the various
+	// channels we'll use for processing.
+	channels = Channels{
+		paths: make(chan string),
+		files: make(chan File)}
+
+	for worker := 1; worker <= config.Concurrency; worker++ {
+		go openpaths(channels.paths)
+		go processfiles(channels.files)
 	}
 
-	// Make sure we wait on any remaining work
-	defer wait.Wait()
+	if filepath.Walk(config.Source, Walk) != nil {
+		log.Warningf("One or more failures while walking %s", config.Source)
+	}
+
+	filesProcessing.Wait()
 }

@@ -68,3 +68,6 @@ var CryptoKey string
 
 // DryRun - Disables certain opertations if True.
 var DryRun = GetBool("dry_run")
+
+// Concurrency - Limits concurrency in a few places
+var Concurrency int

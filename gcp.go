@@ -65,9 +65,9 @@ func main() {
 	dryRun := flag.Bool(
 		"dry-run", false,
 		"If provided, don't actually perform any operations")
-	maxThreads := flag.Int(
-		"max-threads", runtime.NumCPU(),
-		"The maximum number of threads for processing files")
+	concurrency := flag.Int(
+		"concurrency", runtime.NumCPU(),
+		"A sudo-limit which tries to limit concurrency some.")
 
 	flag.Parse()
 	args := flag.Args()
@@ -87,10 +87,10 @@ func main() {
 	config.Source = files.AbsolutePath(flag.Arg(0))
 	config.Destination = files.AbsolutePath(flag.Arg(1))
 	config.DryRun = *dryRun
-	files.MaxThreads = *maxThreads
+	config.Concurrency = *concurrency
 
-	if files.MaxThreads < 1 {
-		log.Error("-max-threads must be at least one")
+	if config.Concurrency < 1 {
+		log.Error("-concurrency must be at least one")
 		os.Exit(1)
 	}
 
