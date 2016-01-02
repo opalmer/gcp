@@ -4,8 +4,8 @@ package files
 
 import (
 	"bytes"
-	"code.google.com/p/lzma"
 	"config"
+	"github.com/opalmer/lzma"
 	"io"
 	"io/ioutil"
 	"os"
