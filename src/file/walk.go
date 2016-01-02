@@ -3,7 +3,7 @@ package files
 // copy.go - Top level module responsible for copying filess
 
 import (
-	"../config"
+	"config"
 	"github.com/op/go-logging"
 	"os"
 	"path/filepath"

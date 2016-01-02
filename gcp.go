@@ -1,8 +1,8 @@
 package main
 
 import (
-	"./libs/config"
-	"./libs/file"
+	"config"
+	"file"
 	"flag"
 	"github.com/op/go-logging"
 	"io/ioutil"

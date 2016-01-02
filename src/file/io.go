@@ -3,9 +3,9 @@ package files
 // io.go - Responsible for performing input and output operations.
 
 import (
-	"../config"
 	"bytes"
 	"code.google.com/p/lzma"
+	"config"
 	"io"
 	"io/ioutil"
 	"os"

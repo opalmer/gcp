@@ -4,7 +4,7 @@ package files
 // when copying files.
 
 import (
-	"../config"
+	"config"
 	"os"
 	"path/filepath"
 	"strings"
