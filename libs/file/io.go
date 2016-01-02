@@ -4,6 +4,9 @@ package files
 
 import (
 	"../config"
+	"bytes"
+	"code.google.com/p/lzma"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -14,171 +17,218 @@ const maxReadSize = 5e+7 // 50MB
 
 // File - The main object used for storing and processing a single file.
 type File struct {
-	source   *os.File
-	tempout  *os.File
-	readsize int64
-	outpath  string
+	sourcepath     string
+	source         *os.File
+	tempout        *os.File
+	readsize       int64
+	outpath        string
+	shouldCompress bool
+	shouldEncrypt  bool
 }
 
-// NewFile - Creates and returns File
-func NewFile(sourcePath string) File {
-	// Open the source file
-	source, err := os.Open(sourcePath)
+func outpath(file *File) string {
+	// Setup the output path
+	outpath := filepath.Join(config.Destination, file.source.Name())
+	if file.shouldCompress {
+		outpath += ".lzma"
+	}
+	if file.shouldEncrypt {
+		outpath += ".aes"
+	}
+	return outpath
+}
+
+func readsize(file *File) int64 {
+	stat, err := file.source.Stat()
 	if err != nil {
-		if os.IsPermission(err) || os.IsNotExist(err) {
-			log.Warningf("Could not open %s (err: %s)", sourcePath, err)
-		} else {
-			log.Fatalf("Failed to open %s (err: %s)", sourcePath, err)
-		}
+		log.Fatal("Failed to start %s (err: %s)", file.source.Name(), err)
+	}
+	size := stat.Size()
+	if size > maxReadSize {
+		size = maxReadSize
+	}
+	return size
+}
+
+func shouldCompress(file *File) bool {
+	if !config.Compress {
+		return false
+	}
+	name := strings.ToLower(file.source.Name())
+	if strings.HasSuffix(name, ".iso") {
+		return false
+	}
+	return true
+}
+
+func shouldEncrypt(file *File) bool {
+	if !config.Encrypt {
+		return false
+	}
+	name := strings.ToLower(file.source.Name())
+	if strings.HasSuffix(name, ".iso") {
+		return false
+	}
+	return true
+}
+
+func compress(file *File, data []byte, bytesRead int64) ([]byte, error) {
+	var compressed bytes.Buffer
+	lzmaWriter := lzma.NewWriterSizeLevel(
+		&compressed, bytesRead, lzma.BestCompression)
+	_, err := lzmaWriter.Write(data)
+	lzmaWriter.Close()
+
+	if err != nil {
+		log.Warningf(
+			"Compression failed for %s (err: %s)",
+			file.source.Name(), err)
+		return nil, err
+	}
+
+	return compressed.Bytes(), nil
+}
+
+// TODO
+func encrypt(file *File, data []byte) ([]byte, error) {
+	return data, nil
+}
+
+// Open - Opens the input and output files where applicable, also sets up the
+// output path.
+func (file *File) open() error {
+	// Open the source file
+	source, err := os.Open(file.sourcepath)
+
+	if err != nil {
+		return err
 	}
 
 	// Open the temporary output file.
 	tempout, err := ioutil.TempFile(os.TempDir(), "gcp")
+
 	if err != nil {
 		source.Close()
-		log.Fatal("Failed to open temporoary output file (err: %s)", err)
+		return err
 	}
 
-	file := File{source: source, tempout: tempout}
+	// Establish the attributes we'll need for working
+	// with the file.
+	//  NOTE: Order matters here.
+	file.source = source
+	file.tempout = tempout
+	file.readsize = readsize(file)
+	file.shouldCompress = shouldCompress(file)
+	file.shouldEncrypt = shouldEncrypt(file)
+	file.outpath = outpath(file)
 
-	// Figure out how large of a slice we're supposed to
-	// take when reading data.
-	sourceStat, err := file.source.Stat()
-	sourceSize := sourceStat.Size()
-
-	if sourceSize < maxReadSize {
-		file.readsize = sourceSize
-	} else {
-		file.readsize = maxReadSize
-	}
-
-	// Figure out what the final file path should be.
-	outpath := filepath.Join(config.Destination, file.source.Name())
-
-	if file.ShouldCompress() {
-		outpath += ".lzma"
-	}
-
-	if file.ShouldEncrypt() {
-		outpath += ".aes"
-	}
-
-	file.outpath = outpath
-
-	return file
+	return nil
 }
 
-// ShouldCompress - Returns True if the file should be compressed.  Some kinds
-// of files we shouldn't compress because it's either time consuming or we
-// wouldn't gamin much by enabling compression.
-func (file *File) ShouldCompress() bool {
-	if !config.Compress {
-		return false
+// Performs the main IO operations responsible for
+// processing the file.  The results end up in the
+// temporary output path.
+func (file *File) process() error {
+	log.Debugf("%s -> %s", file.source.Name(), file.tempout.Name())
+	defer file.source.Close()
+
+	// Files which are neither compressed or encrypted will
+	// just be coped over to their temporary output.
+	if !file.shouldCompress && !file.shouldEncrypt {
+		io.Copy(file.tempout, file.source)
+		return nil
 	}
 
-	name := strings.ToLower(file.source.Name())
-	if strings.HasSuffix(name, ".iso") {
-		return false
+	// Iterate over the whole file and compress and/or encrypt
+	for {
+		data := make([]byte, file.readsize)
+		bytesRead, err := file.source.Read(data)
+		bytesRead64 := int64(bytesRead)
+
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			log.Warningf(
+				"Failed to read %s (err: %s)", file.source.Name(), err)
+			return err
+		}
+
+		// It's possible we didn't read as many bytes
+		// from the file as we allocated for `data`.  If this
+		// is the case, resize data so it matches the number
+		// of bytes read.  Otherwise we end up with empty bytes
+		// in the file we're writing to disk.
+		if file.readsize > bytesRead64 {
+			data = append([]byte(nil), data[:bytesRead]...)
+		}
+
+		if file.shouldCompress {
+			data, err = compress(file, data, bytesRead64)
+			if err != nil {
+				return err
+			}
+		}
+
+		if file.shouldEncrypt {
+			data, err = encrypt(file, data)
+			if err != nil {
+				return err
+			}
+		}
+
+		file.tempout.Write(data)
 	}
 
-	return true
+	return nil
 }
 
-// ShouldEncrypt - Returns True if the file should be compressed.  Some kinds
-// of files we shouldn't compress because it's either time consuming or we
-// wouldn't gamin much by enabling compression.
-func (file *File) ShouldEncrypt() bool {
-	if !config.Encrypt {
-		return false
-	}
+// Responsible for saving the file to the final location.
+func (file *File) save() error {
 
-	name := strings.ToLower(file.source.Name())
-	if strings.HasSuffix(name, ".iso") {
-		return false
-	}
-
-	return true
-}
-
-// DestinationExists - Returns True if the output path exists.
-func (file *File) DestinationExists() bool {
-	_, err := os.Stat(file.outpath)
-	if err == nil {
-		return true
-	} else if os.IsNotExist(err) {
-		return false
-	} else if os.IsPermission(err) {
-		log.Fatalf("Failed to stat %s due to permission error", file.outpath)
-	}
-	log.Fatalf("Unhandled DestinationExists() for %s", file.outpath)
-	return false
-}
-
-// Rename - Renames the temporary file
-func (file *File) Rename() {
 	log.Infof("%s -> %s", file.source.Name(), file.outpath)
 
-	// Check if the parent directory exists, if not we'll
-	// need to create it.
-	err := os.MkdirAll(filepath.Dir(file.outpath), 0700)
-	if err != nil {
-		log.Fatal(
-			"Failed to create parent directory for %s (err: %s)",
-			file.outpath, err)
-	}
-
-	// If we're not performing compression or encryption then it's
-	// a direct copy rather than a rename.
-	if !file.ShouldCompress() && !file.ShouldEncrypt() {
-
-	} else {
-		err := os.Rename(file.tempout.Name(), file.outpath)
-		if err != nil {
-			log.Fatalf(
-				"Failed to rename %s -> %s (err: %s)",
-				file.tempout.Name(), file.outpath, err)
-		}
-	}
-
-	_, err = file.tempout.Stat()
-	if err == nil {
-		err := os.Remove(file.tempout.Name())
-		if err != nil {
-			log.Warningf("Failed to remove %s", file.tempout.Name())
-		}
-	}
-}
-
-// Close - Closes the underlying files objects
-func (file *File) Close() {
-	errors := 0
 	err := file.tempout.Sync()
-
 	if err != nil {
-		errors++
-		log.Warningf("Failed to flush %s (err: %s)", file.tempout.Name(), err)
+		log.Warning("Failed to sync temp output")
+		return err
 	}
 
 	err = file.tempout.Close()
 	if err != nil {
-		errors++
-		log.Warningf("Failed to close %s (err: %s)", file.tempout.Name(), err)
+		log.Warning("Failed to close temp output")
+		return err
 	}
 
-	err = file.source.Close()
+	directory := filepath.Dir(file.outpath)
+	err = os.MkdirAll(directory, 0700)
 	if err != nil {
-		errors++
-		log.Warningf("Failed to close %s (err: %s)", file.source.Name(), err)
+		log.Warningf("Failed to create %s", directory)
+		return err
 	}
 
-	if errors > 0 {
-		log.Fatal("One or more errors while calling Close()")
+	err = os.Rename(file.tempout.Name(), file.outpath)
+	if err != nil {
+		log.Warning("Failed to rename file")
+		return err
 	}
+
+	return nil
+
 }
 
-// Done - Called when we've finished processing the requested file.
-func (file *File) Done() {
+// Performs some final cleanup in the event of an error.  This is mainly
+// aimed at closing the file handles and removing the temp. output file.  We
+// ignore errors in this block of code because we expect processfiles() to
+// call log.Fatal* soon after this function.
+func (file *File) clean() {
 	defer filesProcessing.Done()
-	file.Close()
-	file.Rename()
+
+	if file.source != nil {
+		file.source.Close()
+	}
+
+	if file.tempout != nil {
+		file.tempout.Close()
+		os.Remove(file.tempout.Name())
+	}
 }
