@@ -88,6 +88,7 @@ func main() {
 	config.Destination = files.AbsolutePath(flag.Arg(1))
 	config.DryRun = *dryRun
 	config.Concurrency = *concurrency
+	config.CryptoKey = *encryptionKey
 
 	if config.Concurrency < 1 {
 		log.Error("-concurrency must be at least one")
@@ -118,19 +119,26 @@ func main() {
 	if *disableEncryption {
 		log.Warning("Encryption has been disabled")
 		config.Encrypt = false
-	}
+	} else {
+		if len(*encryptionKey) < 1 {
+			log.Fatal("You must provide an encryption key to -key")
+		}
 
-	// Reading the encryption key
-	data, err := ioutil.ReadFile(*encryptionKey)
-	if err != nil && !os.IsNotExist(err) {
-		log.Fatal(err)
-	}
-	if err == nil {
-		log.Info("Reading encryption key from file '%s'", *encryptionKey)
-		*encryptionKey = string(data[:])
+		// Reading the encryption key
+		data, err := ioutil.ReadFile(*encryptionKey)
+		if err != nil && !os.IsNotExist(err) {
+			log.Fatal(err)
+		}
+		if err == nil {
+			log.Info("Reading encryption key from file '%s'", *encryptionKey)
+			config.CryptoKey = string(data[:])
+		} else {
+			log.Info("Crypto key does not appear to be a file")
+			config.CryptoKey = *encryptionKey
+		}
 	}
 
 	// Load the configuration and start processing.
-	config.Load(*configPath, *encryptionKey)
+	config.Load(*configPath)
 	files.Copy()
 }

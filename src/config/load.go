@@ -21,7 +21,6 @@ func Default() *ini.File {
 		encrypt = true
 		compress = true
 		dry_run = false
-		crypto_key =
 		include =
 		exclude = .DS_Store,.git,.svn,.hg,.egg*,__pycache__,.idea,*.pyc
 	`))
@@ -56,7 +55,7 @@ func LoadConfigFile(path string) {
 }
 
 // Load - Loads the configuration
-func Load(path string, encryptionKey string) {
+func Load(path string) {
 	// Try to load from the environment
 	value, found := os.LookupEnv("GCP_CONFIG")
 	if found {
@@ -71,13 +70,4 @@ func Load(path string, encryptionKey string) {
 	}
 
 	LoadConfigFile(path)
-
-	// A specific encryption key was provided, use that instead.
-	if len(encryptionKey) > 0 {
-		section := cfg.Section("gcp")
-		key := section.Key("crypto_key")
-		key.SetValue(encryptionKey)
-	}
-
-	CryptoKey = GetKey("crypto_key").Value()
 }
