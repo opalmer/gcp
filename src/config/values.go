@@ -10,24 +10,15 @@ import (
 func GetKey(key string) *ini.Key {
 	section, err := cfg.GetSection("gcp")
 	if err != nil {
-		log.Fatalf("Failed to retrieve config section gcp (err: %s)", err)
+		log.Fatal(err)
 	}
 
 	value, err := section.GetKey(key)
 	if err != nil {
-		log.Fatalf("Failed to retrieve key gcp.%s (err: %s)", key, err)
+		log.Fatal(err)
 	}
 
 	return value
-}
-
-// GetBool - Returns a boolean for the given ``key``
-func GetBool(key string) bool {
-	result, err := GetKey(key).Bool()
-	if err != nil {
-		log.Fatalf("Failed to retrieve gcp.encrypt as bool (err: %s)", err)
-	}
-	return result
 }
 
 // GetSlice - Converts a config key from a comma separated entry into a slice.
@@ -45,17 +36,17 @@ func GetSlice(key string) []string {
 	return output
 }
 
-// Encrypt - True if encryption is enabled in the config
-var Encrypt = GetBool("encrypt")
+// Include -- Path inclusion patterns
+var Include []string
 
-// Compress - True if compression is enabled in the config
-var Compress = GetBool("compress")
+// Exclude - Path exclusion patterns
+var Exclude []string
 
-// Include -- All inclusion patterns
-var Include = GetSlice("include")
+// ExcludeCompression - Patterns to dictate which files should not be compressed
+var ExcludeCompression []string
 
-// Exclude - All exclusion patterns
-var Exclude = GetSlice("exclude")
+// ExcludeEncryption - Patterns to dictate which files should not be encrypted
+var ExcludeEncryption []string
 
 // Destination - The root path where files will be copied to
 var Destination string
@@ -66,8 +57,8 @@ var Source string
 // CryptoKey - The key to use for encrypting things
 var CryptoKey string
 
-// DryRun - Disables certain opertations if True.
-var DryRun = GetBool("dry_run")
-
 // Concurrency - Limits concurrency in a few places
 var Concurrency int
+
+// DryRun - Used for testing
+var DryRun bool

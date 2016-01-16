@@ -13,8 +13,6 @@ import (
 	"strings"
 )
 
-const maxReadSize = 5e+7 // 50MB
-
 // File - The main object used for storing and processing a single file.
 type File struct {
 	sourcepath     string
@@ -51,9 +49,6 @@ func readsize(file *File) int64 {
 }
 
 func shouldCompress(file *File) bool {
-	if !config.Compress {
-		return false
-	}
 	name := strings.ToLower(file.source.Name())
 	if strings.HasSuffix(name, ".iso") {
 		return false
@@ -62,9 +57,6 @@ func shouldCompress(file *File) bool {
 }
 
 func shouldEncrypt(file *File) bool {
-	if !config.Encrypt {
-		return false
-	}
 	name := strings.ToLower(file.source.Name())
 	if strings.HasSuffix(name, ".iso") {
 		return false
@@ -221,7 +213,6 @@ func (file *File) save() error {
 // ignore errors in this block of code because we expect processfiles() to
 // call log.Fatal* soon after this function.
 func (file *File) clean() {
-	defer filesProcessing.Done()
 
 	if file.source != nil {
 		file.source.Close()

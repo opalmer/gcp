@@ -5,69 +5,56 @@ package config
 import (
 	"github.com/go-ini/ini"
 	"github.com/op/go-logging"
+	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
 )
 
-var cfg = Default()
+var cfg ini.File
+
 var log = logging.MustGetLogger("gcp")
 
-// Default - returns the default configuration
-func Default() *ini.File {
-	cfg := ini.Empty()
-	cfg.Append([]byte(`
-		[gcp]
-		encrypt = true
-		compress = true
-		dry_run = false
-		include =
-		exclude = .DS_Store,.git,.svn,.hg,.egg*,__pycache__,.idea,*.pyc
-	`))
-	return cfg
-}
-
-// LoadConfigFile - Update the configuration with data from `path`
-func LoadConfigFile(path string) {
+func loadFile(path string) {
 	if len(path) < 1 {
 		return
 	}
 
-	stat, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		log.Warningf("File %s does not exist", path)
-	} else if err != nil {
-		log.Warningf("Can't load %s (err: %s)", path, err)
-	} else if stat.IsDir() {
-		log.Warningf("%s is a directory", path)
-	} else {
-		err := cfg.Append(path, path)
-		if err != nil && !os.IsNotExist(err) {
-			log.Fatal(err)
-		} else if err != nil {
-			log.Warning(
-				"Failed to load config from file '%s' (err: %s)", path, err)
-		} else {
-			log.Debug("Loaded config from file '%s'", path)
-		}
+	log.Debugf("Loading %s", path)
+
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.Fatalf("Failed to read %s (err: %s)", path, err)
 	}
 
+	if cfg.Append(data) != nil {
+		log.Fatalf("Failed to append bytes from %s", path)
+	}
 }
 
 // Load - Loads the configuration
 func Load(path string) {
+	cfg = *ini.Empty()
+	cfg.Append([]byte(`
+		[gcp]
+		include =
+		exclude =
+		exclude_compression = *.iso,*.png,*.jpg,*.jpeg
+		exclude_encryption = *.iso,
+	`))
+
 	// Try to load from the environment
 	value, found := os.LookupEnv("GCP_CONFIG")
 	if found {
-		LoadConfigFile(value)
+		loadFile(value)
 	}
 
 	// Load from $HOME/.gcp.ini
 	user, err := user.Current()
 	if err == nil {
 		path := filepath.Join(user.HomeDir, ".gcp.ini")
-		LoadConfigFile(path)
+		loadFile(path)
 	}
 
-	LoadConfigFile(path)
+	loadFile(path)
 }

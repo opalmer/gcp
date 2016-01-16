@@ -5,13 +5,12 @@ package files
 import (
 	"config"
 	"github.com/op/go-logging"
+	"github.com/ryanuber/go-glob"
 	"os"
 	"path/filepath"
-	"sync"
 )
 
 var log = logging.MustGetLogger("gcp")
-var filesProcessing = sync.WaitGroup{}
 
 // Walk - Called by filepath.Walk to process files and directories.  This also
 // performs the work of filtering paths which wish to process using SkipPath()
@@ -28,17 +27,42 @@ func Walk(path string, info os.FileInfo, err error) error {
 		log.Fatalf("Stat failed on %s (err: %s)", path, err)
 	}
 
-	if SkipPath(path) || stat.Size() == 0 {
+	if stat.Size() == 0 {
+		return nil
+	}
+
+	exclude := false
+	for _, exclusionPattern := range config.Exclude {
+		if glob.Glob(exclusionPattern, path) {
+			exclude = true
+			break
+		}
+	}
+
+	// See if there are any include statements that will force
+	// the path to be included.
+	if exclude {
+		for _, inclusionPattern := range config.Include {
+			if glob.Glob(inclusionPattern, path) {
+				exclude = false
+				break
+			}
+		}
+	}
+
+	if exclude {
+		log.Debugf("Excluding %s", path)
 		if stat.IsDir() {
 			return filepath.SkipDir
 		}
 		return nil
 	}
 
-	if !stat.IsDir() {
-		filesProcessing.Add(1)
-		channels.paths <- path
+	if !stat.IsDir() && stat.Size() > 0 {
+		processing.Add(1)
+		processPaths <- path
 	}
+
 	return nil
 }
 
@@ -47,20 +71,15 @@ func Walk(path string, info os.FileInfo, err error) error {
 func Copy() {
 	log.Infof("Copy %s -> %s", config.Source, config.Destination)
 
-	// Before we walk over the paths, setup all the various
-	// channels we'll use for processing.
-	channels = Channels{
-		paths: make(chan string),
-		files: make(chan File)}
+	processPaths = make(chan string)
 
 	for worker := 1; worker <= config.Concurrency; worker++ {
-		go openpaths(channels.paths)
-		go processfiles(channels.files)
+		go process(processPaths)
 	}
 
 	if filepath.Walk(config.Source, Walk) != nil {
 		log.Warningf("One or more failures while walking %s", config.Source)
 	}
 
-	filesProcessing.Wait()
+	processing.Wait()
 }
